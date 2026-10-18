@@ -56,6 +56,15 @@ h1{font-size:1.8rem;background:linear-gradient(90deg,#2563eb,#7c3aed,#ec4899);-w
 #swap,.zoom button{background:#2563eb;color:#fff;border-color:#2563eb}
 #from{border-left:5px solid var(--a)}#to{border-left:5px solid var(--b)}
 ol li::marker{color:#7c3aed;font-weight:700}
+.go{width:100%;margin-top:12px;background:linear-gradient(90deg,#16a34a,#0e7490);color:#fff;border:0;font-weight:700;font-size:1.05rem;padding:12px}
+.go.stop{background:#c0392b}
+.dir{display:flex;align-items:center;gap:12px;margin:0 0 10px;padding:10px 12px;border-radius:12px;background:var(--fac);border:2px solid #7c3aed;font-weight:600;position:sticky;top:max(8px,env(safe-area-inset-top,0px));z-index:5}
+.dir[hidden]{display:none}
+.dir .ar{font-size:2rem;line-height:1;width:44px;text-align:center;color:#7c3aed}
+.dir small{display:block;font-weight:400;color:var(--mut)}
+ol li.cur{background:var(--fac);border-radius:8px;font-weight:700;padding:2px 6px;margin-left:-6px}
+.sig{fill:none;stroke:#e11d48;stroke-width:5;transform-box:fill-box;transform-origin:center;animation:pul 1.2s ease-out infinite}
+@keyframes pul{0%{transform:scale(.6);opacity:1}100%{transform:scale(2.6);opacity:0}}
 </style>
 </head>
 <body>
@@ -69,9 +78,11 @@ ol li::marker{color:#7c3aed;font-weight:700}
     <button id="swap" aria-label="Swap start and destination">⇅</button>
     <div><label for="to">To</label><select id="to"></select></div>
   </div>
+  <button id="go" class="go">▶ Get directions</button>
   <div id="out"><p class="hint" style="margin-top:12px">Choose a start and a destination, or tap two places on the map.</p></div>
 </div>
 
+<div id="dir" class="dir" hidden></div>
 <div class="zoom"><button onclick="zoom(-.5)" aria-label="Zoom out">−</button><button onclick="zoom(.5)" aria-label="Zoom in">+</button><button onclick="zoom(0)">Fit</button></div>
 <div class="mapwrap"><svg id="map" viewBox="205 25 905 860" role="img" aria-label="Campus map"></svg></div>
 <div class="key"><span><i style="background:var(--cam)"></i>Campus place</span><span><i style="background:var(--fac)"></i>Stairs, lift, washroom</span><span><i style="background:var(--room)"></i>Room</span><span>Dotted = steps</span></div>
@@ -213,14 +224,14 @@ function route(a,b){
 const nm=id=>N[id].k==="r"?"Room "+N[id].lb:N[id].lb;
 const txt=sel=>sel.options[sel.selectedIndex].text;
 
-function show(){
+function show(){stopWalk();cur=null;
   document.querySelectorAll(".on,.a,.b").forEach(e=>e.classList.remove("on","a","b"));
   const a=fs.value,b=ts.value;
   if(a)document.getElementById("n"+a).classList.add("a");
   if(b)document.getElementById("n"+b).classList.add("b");
   if(!a||!b){out.innerHTML=`<p class="hint" style="margin-top:12px">${a?"Now choose a destination.":"Choose a start and a destination, or tap two places on the map."}</p>`;return;}
   if(a===b){out.innerHTML=`<p class="hint" style="margin-top:12px">You’re already there.</p>`;return;}
-  const{path,st}=route(a,b);
+  const{path,st}=route(a,b);cur={path,st};
   path.forEach((id,i)=>{document.getElementById("n"+id).classList.add("on");
     if(i){const e=document.getElementById(`e${path[i-1]}_${id}`)||document.getElementById(`e${id}_${path[i-1]}`);e.classList.add("on");}});
   let h=`<ol><li>Start at <b>${txt(fs)}</b></li>`;
@@ -232,6 +243,46 @@ function show(){
 fs.onchange=ts.onchange=show;
 document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{fs.value="gate";ts.value=c.dataset.to;show();window.scrollTo({top:0,behavior:"smooth"});});
 document.getElementById("swap").onclick=()=>{const i=fs.selectedIndex;fs.selectedIndex=ts.selectedIndex;ts.selectedIndex=i;show();};
+let cur=null,anim=null;
+const go=document.getElementById("go"),dirEl=document.getElementById("dir"),SPEED=170;
+const WALKER='<g id="walker" style="pointer-events:none"><circle class="sig" r="16"/><circle class="sig" r="16" style="animation-delay:.6s"/><g id="wr"><polygon points="0,-17 12,11 0,5 -12,11" fill="#e11d48" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></g></g>';
+function stopWalk(){if(anim)cancelAnimationFrame(anim);anim=null;const w=document.getElementById("walker");if(w)w.remove();go.textContent="▶ Get directions";go.classList.remove("stop");dirEl.hidden=true;document.querySelectorAll("li.cur").forEach(l=>l.classList.remove("cur"));}
+function instr(path,st,i){
+  const n=path.length,P=path.map(id=>N[id]),v=(a,b)=>[P[b].x-P[a].x,P[b].y-P[a].y];
+  if(i===n-1)return{a:"📍",t:`You’ve arrived at <b>${txt(ts)}</b>`};
+  const nx=nm(path[i+1]),stp=st[i+1];
+  if(i===0)return{a:"🚶",t:`Start at <b>${txt(fs)}</b> and walk toward <b>${nx}</b>${stp?" (steps)":""}`};
+  const[ax,ay]=v(i-1,i),[bx,by]=v(i,i+1),g=Math.atan2(ax*by-ay*bx,ax*bx+ay*by)*180/Math.PI,m=Math.abs(g),r=g>0;
+  let a,w;
+  if(m<20){a="↑";w="Go straight";}else if(m<60){a=r?"↗":"↖";w=r?"Bear right":"Bear left";}else if(m<135){a=r?"→":"←";w=r?"Turn right":"Turn left";}else{a="↩";w="Turn around";}
+  return{a,t:`${w} ${m<20?"past":"at"} <b>${nm(path[i])}</b> toward ${nx}${stp?" and take the steps":""}`};
+}
+function say(o,j,n){dirEl.hidden=false;dirEl.innerHTML=`<span class="ar">${o.a}</span><span>${o.t}<small>${j<n-1?"Step "+(j+1)+" of "+(n-1):"Done"}</small></span>`;}
+function startWalk(){
+  if(!cur){dirEl.hidden=false;dirEl.innerHTML='<span class="ar">☝</span><span>Choose a start and a destination first.</span>';return;}
+  stopWalk();zoom(0);
+  const{path,st}=cur,n=path.length,P=path.map(id=>N[id]),L=[0];
+  for(let i=1;i<n;i++)L.push(L[i-1]+Math.hypot(P[i].x-P[i-1].x,P[i].y-P[i-1].y));
+  const total=L[n-1],ins=path.map((_,i)=>instr(path,st,i)),lis=out.querySelectorAll("li");
+  map.insertAdjacentHTML("beforeend",WALKER);
+  const wk=document.getElementById("walker"),wr=document.getElementById("wr");
+  go.textContent="■ Stop";go.classList.add("stop");
+  say(ins[0],0,n);dirEl.scrollIntoView({behavior:"smooth",block:"start"});
+  let k=-1,t0=null;
+  function frame(t){
+    if(t0===null)t0=t;
+    const d=Math.min(total,(t-t0)/1000*SPEED);
+    let i=1;while(i<n-1&&L[i]<d)i++;
+    const f=(d-L[i-1])/(L[i]-L[i-1]||1),dx=P[i].x-P[i-1].x,dy=P[i].y-P[i-1].y;
+    wk.setAttribute("transform",`translate(${P[i-1].x+dx*f} ${P[i-1].y+dy*f})`);
+    wr.setAttribute("transform",`rotate(${Math.atan2(dx,-dy)*180/Math.PI})`);
+    let j=0;while(j<n-1&&L[j+1]<=d+.001)j++;
+    if(j!==k){k=j;say(ins[j],j,n);lis.forEach(l=>l.classList.remove("cur"));if(lis[j])lis[j].classList.add("cur");}
+    if(d<total)anim=requestAnimationFrame(frame);else{anim=null;go.textContent="↻ Replay";go.classList.remove("stop");}
+  }
+  anim=requestAnimationFrame(frame);
+}
+go.onclick=()=>{if(anim)stopWalk();else startWalk();};
 </script>
 </body>
 </html>
