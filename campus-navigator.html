@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AISSMS Navigator</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f5f4f0;--card:#fff;--ink:#1c2228;--mut:#626d78;--line:#b8c0c8;--acc:#0b6bcb;--room:#eaeff4;--fac:#dfeafb;--cam:#e0f3e7;--a:#1f9d55;--b:#c0392b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#13171b;--card:#1b2025;--ink:#e8ecef;--mut:#98a3ad;--line:#46515c;--acc:#4f9cf0;--room:#262d34;--fac:#22344d;--cam:#1f3a2b;--a:#43c47a;--b:#ee6b5c}}
+:root[data-theme="dark"]{--bg:#13171b;--card:#1b2025;--ink:#e8ecef;--mut:#98a3ad;--line:#46515c;--acc:#4f9cf0;--room:#262d34;--fac:#22344d;--cam:#1f3a2b;--a:#43c47a;--b:#ee6b5c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:0 0 2px}
+.sub{color:var(--mut);margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+.pick{display:grid;gap:10px;grid-template-columns:1fr}
+@media(min-width:560px){.pick{grid-template-columns:1fr auto 1fr;align-items:end}}
+label{display:block;font-size:.8rem;color:var(--mut);margin-bottom:4px}
+select,button{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;width:100%}
+button{cursor:pointer;width:auto;min-width:48px}
+ol{margin:8px 0 0;padding-left:22px}
+li{margin:4px 0}
+.hint{color:var(--mut);margin:0}
+.mapwrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+svg{display:block;width:100%;height:auto}
+.zoom{display:flex;gap:8px;margin:0 0 8px}.zoom button{padding:6px 16px}
+.ed{stroke:var(--line);stroke-width:3;stroke-linecap:round}
+.ed.s{stroke-dasharray:2 7}
+.ed.on{stroke:var(--acc);stroke-width:6}
+.dj{fill:var(--line)}.dj.on{fill:var(--acc)}
+.box{fill:var(--room);stroke:var(--line);stroke-width:1.5}
+.f .box{fill:var(--fac)}.c .box{fill:var(--cam)}
+.nd{cursor:pointer}
+.nd text{font:600 20px system-ui,sans-serif;fill:var(--ink);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.nd.on .box{fill:var(--acc);stroke:var(--acc)}.nd.on text{fill:#fff}
+.nd.a .box{stroke:var(--a);stroke-width:4}.nd.b .box{stroke:var(--b);stroke-width:4}
+.lbl{font:600 17px system-ui,sans-serif;fill:var(--mut);text-anchor:end}
+.key{display:flex;flex-wrap:wrap;gap:12px;font-size:.8rem;color:var(--mut);margin:10px 2px}
+.key i{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--line);vertical-align:-1px;margin-right:4px}
+.card h2{font-size:1.1rem;margin:0 0 6px}
+.card ul{margin:0;padding-left:20px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}
+.chip{width:auto;border-radius:999px;padding:8px 14px}
+</style>
+</head>
+<body>
+<main>
+<h1>AISSMS Navigator</h1>
+<p class="sub">Find classrooms, labs and key places on campus.</p>
+
+<div class="card">
+  <div class="pick">
+    <div><label for="from">From</label><select id="from"></select></div>
+    <button id="swap" aria-label="Swap start and destination">⇅</button>
+    <div><label for="to">To</label><select id="to"></select></div>
+  </div>
+  <div id="out"><p class="hint" style="margin-top:12px">Choose a start and a destination, or tap two places on the map.</p></div>
+</div>
+
+<div class="zoom"><button onclick="zoom(-.5)" aria-label="Zoom out">−</button><button onclick="zoom(.5)" aria-label="Zoom in">+</button><button onclick="zoom(0)">Fit</button></div>
+<div class="mapwrap"><svg id="map" viewBox="205 25 905 860" role="img" aria-label="Campus map"></svg></div>
+<div class="key"><span><i style="background:var(--cam)"></i>Campus place</span><span><i style="background:var(--fac)"></i>Stairs, lift, washroom</span><span><i style="background:var(--room)"></i>Room</span><span>Dotted = steps</span></div>
+<p class="hint">Schematic map based on the hand-drawn campus sketch. Positions are approximate.</p>
+
+<section class="card" id="visitors" style="margin-top:14px">
+  <h2>Info for visitors</h2>
+  <p class="hint">Tap a place for directions from the Main Gate.</p>
+  <div class="chips">
+    <button class="chip" data-to="canteen">Canteen</button>
+    <button class="chip" data-to="garden">Garden</button>
+    <button class="chip" data-to="lift">Lift</button>
+    <button class="chip" data-to="st1">Stairs-1</button>
+    <button class="chip" data-to="wr">WR</button>
+    <button class="chip" data-to="lwr">LWR</button>
+  </div>
+  <ul>
+    <li><b>Getting in:</b> Follow the main path from the Main Gate to the building entrance. The Statue and IOIT are near the gate; the Cop and the Garden path come off further along.</li>
+    <li><b>Finding rooms:</b> Rooms 100–106 and 141 are close to the entrance. The 114–125 rooms are along the main and cross corridors, and 126–136 are towards the far end.</li>
+    <li><b>Stairs and lift:</b> Stairs-1 is just inside the entrance. Stairs-2 and WR are at the top of the main corridor, Stairs-3 and LWR at the far end, and the lift is next to room 100.</li>
+    <li><b>Closed gate:</b> The gate off the bottom corridor is closed, so please head back to the main entrance to leave.</li>
+    <li><b>Outside the building:</b> The Canteen and the Garden are both reached by a short flight of steps from the main path.</li>
+  </ul>
+</section>
+</main>
+
+<script>
+// id|label|kind(c campus, f facility, r room, j junction)|x|y  (x,y as drawn on the sketch photo)
+const NODES=`gate|Main Gate|c|45|1005
+g1|Gate path junction|j|100|965
+statue|Statue|c|210|940
+ioit|IOIT|c|190|1062
+g2|Cop junction|j|175|710
+cap|Cop|c|185|775
+j|Garden path junction|j|305|750
+garden|Garden|c|405|820
+entry|Building entrance|j|385|570
+plane|Plane|c|285|620
+canteen|Canteen|c|215|400
+w1|Left wing junction|j|487|465
+tl|Top-left corner|j|487|305
+l141|Left corridor|j|487|650
+bc|Bottom-left corner|j|487|855
+st1|Stairs-1|f|545|572
+c1|Cross corridor|j|630|572
+c2|Cross corridor (inner)|j|697|572
+t1|Top corridor|j|610|305
+s0|Top of main corridor|j|750|305
+s1|Main corridor (114–117)|j|750|430
+s2|Main corridor (118/125)|j|750|572
+s3|Main corridor (124/127)|j|750|715
+s4|Main corridor (126)|j|750|805
+s5|Main corridor (bottom junction)|j|750|855
+st3|Stairs-3|f|750|945
+lwr|LWR|f|750|1055
+st2|Stairs-2|f|750|262
+wr|WR|f|808|305
+lift|Lift|f|428|270
+cgj|Closed-gate corridor|j|537|855
+b1|Bottom corridor (134/135)|j|610|855
+b2|Bottom corridor (136)|j|645|855
+b4|Bottom corridor (131–133)|j|715|855
+b5|Bottom corridor (129)|j|800|855
+b6|Bottom corridor (128)|j|850|855
+cg|Closed gate|c|550|945
+r100|100|r|460|335
+r103|103|r|525|328
+r104|104|r|525|270
+r102|102|r|515|398
+r101|101|r|505|460
+r105|105|r|610|245
+r106|106|r|610|350
+r114|114|r|785|388
+r115|115|r|727|410
+r117|117|r|782|455
+r116|116|r|727|480
+r118|118|r|783|550
+r125|125|r|782|630
+r119|119|r|697|545
+r122|122/123|r|690|620
+r120|120|r|630|545
+r121|121|r|630|610
+r124|124|r|718|683
+r127|127|r|722|745
+r126|126|r|775|800
+r132|132/133|r|710|814
+r131|131|r|710|893
+r134|134/135|r|595|800
+r136|136|r|640|890
+r129|129|r|800|885
+r128|128|r|850|872
+r141|141|r|463|660`;
+// a-b = walkable link, :s = steps
+const EDGES=`gate-g1 g1-ioit g1-statue g1-g2 g2-cap g2-j j-garden:s j-entry entry-plane entry-canteen:s
+entry-w1 entry-st1 entry-l141 w1-st1 tl-w1 l141-bc tl-t1 t1-s0 tl-lift tl-r100 tl-r103 r103-r104 t1-r105 t1-r106
+w1-r101 w1-r102 l141-r141 s0-wr s0-st2 s0-s1 s1-r114 s1-r115 s1-r116 s1-r117 s1-s2 s2-r118 s2-r125 s2-c2
+c2-c1 c1-st1 c2-r119 c2-r122 c1-r120 c1-r121 s2-s3 s3-r124 s3-r127 s3-s4 s4-r126 s4-s5 s5-st3 st3-lwr
+bc-cgj cgj-cg b1-r134 b1-b2 b2-r136 b2-b4 b4-s5 b4-r132 b4-r131 s5-b5 b5-r129 b5-b6 b6-r128`;
+
+const N={},adj={};
+NODES.split("\n").forEach(l=>{const[i,lb,k,px,py]=l.split("|");N[i]={i,lb,k,x:+py,y:900-px};adj[i]=[];});
+const edges=[];
+EDGES.split(/\s+/).forEach(t=>{const[p,f]=t.split(":"),[a,b]=p.split("-");
+  const w=Math.hypot(N[a].x-N[b].x,N[a].y-N[b].y);
+  edges.push({a,b,s:f==="s"});adj[a].push([b,w,!!f]);adj[b].push([a,w,!!f]);});
+
+// dropdowns
+const G={c:["Campus places",[]],f:["Stairs, lift, WR / LWR",[]],r:["Rooms",[]]};
+Object.values(N).forEach(n=>{if(n.k==="j")return;
+  (n.k==="r"?n.lb.split("/"):[n.lb]).forEach(l=>G[n.k][1].push([n.i,n.k==="r"?"Room "+l:l,l]));});
+G.r[1].sort((a,b)=>a[2]-b[2]);
+const optHTML='<option value="">Choose a place</option>'+Object.values(G).map(([t,a])=>
+  `<optgroup label="${t}">${a.map(([i,tx])=>`<option value="${i}">${tx}</option>`).join("")}</optgroup>`).join("");
+const fs=document.getElementById("from"),ts=document.getElementById("to"),out=document.getElementById("out");
+fs.innerHTML=ts.innerHTML=optHTML;
+
+// map
+let s=`<line x1="215" y1="515" x2="1105" y2="515" stroke="var(--line)" stroke-width="2" stroke-dasharray="8 8"/>
+<text class="lbl" x="1100" y="498">Main building ↑</text><text class="lbl" x="1100" y="538">Campus grounds ↓</text>`;
+edges.forEach(e=>{const A=N[e.a],B=N[e.b];
+  s+=`<line class="ed${e.s?" s":""}" id="e${e.a}_${e.b}" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;});
+Object.values(N).forEach(n=>{
+  if(n.k==="j"){s+=`<circle class="dj" id="n${n.i}" cx="${n.x}" cy="${n.y}" r="5"/>`;return;}
+  const w=Math.max(46,n.lb.length*11+14);
+  s+=`<g class="nd ${n.k}" id="n${n.i}" data-i="${n.i}" transform="translate(${n.x} ${n.y})"><rect class="box" x="${-w/2}" y="-14" width="${w}" height="28" rx="7"/><text>${n.lb}</text></g>`;});
+const map=document.getElementById("map");map.innerHTML=s;
+let z=1;function zoom(d){z=d===0?1:Math.min(4,Math.max(1,z+d));map.style.width=z*100+"%";}
+map.addEventListener("click",ev=>{const g=ev.target.closest(".nd");if(!g)return;
+  if(!fs.value||ts.value){fs.value=g.dataset.i;ts.value="";}else ts.value=g.dataset.i;show();});
+
+// shortest path
+function route(a,b){
+  const d={},p={},q=new Set(Object.keys(N));Object.keys(N).forEach(k=>d[k]=1e9);d[a]=0;
+  while(q.size){let u=null;q.forEach(k=>{if(u===null||d[k]<d[u])u=k;});q.delete(u);if(u===b)break;
+    adj[u].forEach(([v,w,st])=>{if(d[u]+w<d[v]){d[v]=d[u]+w;p[v]=[u,st];}});}
+  const path=[b],st=[false];while(path[0]!==a){const[u,f]=p[path[0]];path.unshift(u);st.unshift(f);}
+  st.shift();st.unshift(false);return{path,st};
+}
+const nm=id=>N[id].k==="r"?"Room "+N[id].lb:N[id].lb;
+const txt=sel=>sel.options[sel.selectedIndex].text;
+
+function show(){
+  document.querySelectorAll(".on,.a,.b").forEach(e=>e.classList.remove("on","a","b"));
+  const a=fs.value,b=ts.value;
+  if(a)document.getElementById("n"+a).classList.add("a");
+  if(b)document.getElementById("n"+b).classList.add("b");
+  if(!a||!b){out.innerHTML=`<p class="hint" style="margin-top:12px">${a?"Now choose a destination.":"Choose a start and a destination, or tap two places on the map."}</p>`;return;}
+  if(a===b){out.innerHTML=`<p class="hint" style="margin-top:12px">You’re already there.</p>`;return;}
+  const{path,st}=route(a,b);
+  path.forEach((id,i)=>{document.getElementById("n"+id).classList.add("on");
+    if(i){const e=document.getElementById(`e${path[i-1]}_${id}`)||document.getElementById(`e${id}_${path[i-1]}`);e.classList.add("on");}});
+  let h=`<ol><li>Start at <b>${txt(fs)}</b></li>`;
+  for(let i=1;i<path.length;i++){const last=i===path.length-1,n=last?txt(ts):nm(path[i]);
+    h+=last?`<li>${st[i]?"Take the steps to":"Arrive at"} <b>${n}</b></li>`
+      :`<li>${st[i]?"Take the steps to":N[path[i]].k==="j"?"Continue to":"Pass"} ${n}</li>`;}
+  out.innerHTML=h+"</ol>";
+}
+fs.onchange=ts.onchange=show;
+document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{fs.value="gate";ts.value=c.dataset.to;show();window.scrollTo({top:0,behavior:"smooth"});});
+document.getElementById("swap").onclick=()=>{const i=fs.selectedIndex;fs.selectedIndex=ts.selectedIndex;ts.selectedIndex=i;show();};
+</script>
+</body>
+</html>
